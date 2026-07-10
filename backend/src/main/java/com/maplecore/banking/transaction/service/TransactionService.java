@@ -15,6 +15,9 @@ import com.maplecore.banking.transaction.entity.TransactionStatus;
 import com.maplecore.banking.transaction.entity.TransactionType;
 import com.maplecore.banking.transaction.repository.IdempotencyRecordRepository;
 import com.maplecore.banking.transaction.repository.TransactionRepository;
+import com.maplecore.banking.fraud.service.FraudService;
+import com.maplecore.banking.fraud.service.rules.FraudContext;
+import com.maplecore.banking.fraud.service.rules.FraudRuleResult;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,16 +40,19 @@ public class TransactionService {
     private final AccountRepository accountRepository;
     private final CustomerRepository customerRepository;
     private final IdempotencyRecordRepository idempotencyRecordRepository;
+    private final FraudService fraudService;
     private final ObjectMapper objectMapper;
 
     public TransactionService(TransactionRepository transactionRepository,
                               AccountRepository accountRepository,
                               CustomerRepository customerRepository,
-                              IdempotencyRecordRepository idempotencyRecordRepository) {
+                              IdempotencyRecordRepository idempotencyRecordRepository,
+                              FraudService fraudService) {
         this.transactionRepository = transactionRepository;
         this.accountRepository = accountRepository;
         this.customerRepository = customerRepository;
         this.idempotencyRecordRepository = idempotencyRecordRepository;
+        this.fraudService = fraudService;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.findAndRegisterModules();
     }
@@ -172,6 +179,43 @@ public class TransactionService {
             throw new InsufficientFundsException("Insufficient funds in account: " + sourceNo);
         }
 
+        // Fraud Check
+        Instant limitWindow = Instant.now().minus(5, ChronoUnit.MINUTES);
+        long recentCount = transactionRepository.countRecentTransfers(customer.getId(), limitWindow);
+
+        FraudContext fraudContext = new FraudContext(
+                customer,
+                sourceAccount,
+                destAccount,
+                transferAmount,
+                TransactionType.TRANSFER,
+                (int) recentCount,
+                false,
+                0
+        );
+
+        FraudRuleResult fraudResult = fraudService.evaluateContext(fraudContext);
+        if (fraudResult.isFlagged()) {
+            Transaction transaction = Transaction.builder()
+                    .referenceNumber("TX-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
+                    .sourceAccount(sourceAccount)
+                    .destinationAccount(destAccount)
+                    .amount(transferAmount)
+                    .transactionType(TransactionType.TRANSFER)
+                    .status(TransactionStatus.FLAGGED)
+                    .description(request.description() != null ? request.description() : "Transfer (Held)")
+                    .build();
+
+            Transaction savedTx = transactionRepository.save(transaction);
+            fraudService.createAlert(savedTx, fraudResult.ruleName(), fraudResult.reason());
+            TransactionResponse response = mapToResponse(savedTx);
+
+            // Save Idempotency response if key exists
+            cacheIdempotency(idempotencyKey, response);
+
+            return response;
+        }
+
         // Apply mutations
         sourceAccount.setBalance(sourceAccount.getBalance().subtract(transferAmount));
         destAccount.setBalance(destAccount.getBalance().add(transferAmount));
@@ -193,6 +237,12 @@ public class TransactionService {
         TransactionResponse response = mapToResponse(savedTx);
 
         // Save Idempotency response if key exists
+        cacheIdempotency(idempotencyKey, response);
+
+        return response;
+    }
+
+    private void cacheIdempotency(String idempotencyKey, TransactionResponse response) {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             try {
                 String responseBody = objectMapper.writeValueAsString(response);
@@ -202,11 +252,9 @@ public class TransactionService {
                         .build();
                 idempotencyRecordRepository.save(record);
             } catch (JsonProcessingException e) {
-                // Log and proceed, idempotency caching failure shouldn't rollback a successful transfer
+                // Log and proceed
             }
         }
-
-        return response;
     }
 
     @Transactional(readOnly = true)

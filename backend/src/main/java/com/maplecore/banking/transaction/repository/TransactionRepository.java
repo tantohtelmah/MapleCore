@@ -21,4 +21,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
            "WHERE h.id = :customerId AND t.transactionType = 'TRANSFER' " +
            "AND t.status = 'COMPLETED' AND t.createdDate >= :startOfDay")
     BigDecimal sumTransferredToday(Long customerId, Instant startOfDay);
+
+    @Query("SELECT COUNT(t) FROM Transaction t JOIN t.sourceAccount a JOIN a.holders h " +
+           "WHERE h.id = :customerId AND t.transactionType = 'TRANSFER' " +
+           "AND t.status = 'COMPLETED' AND t.createdDate >= :since")
+    long countRecentTransfers(Long customerId, Instant since);
 }
