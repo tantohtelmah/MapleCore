@@ -1,92 +1,158 @@
-import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import DashboardLayout from './layouts/DashboardLayout';
+
+// Import Pages
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import CustomerDashboard from './pages/CustomerDashboard';
+import OperationsDashboard from './pages/OperationsDashboard';
+import AccountsPage from './pages/AccountsPage';
+import AccountDetailsPage from './pages/AccountDetailsPage';
+import TransferPage from './pages/TransferPage';
+import BeneficiaryPage from './pages/BeneficiaryPage';
+import ProfilePage from './pages/ProfilePage';
+import NotificationsPage from './pages/NotificationsPage';
+import KycReviewPage from './pages/KycReviewPage';
+import FraudReviewPage from './pages/FraudReviewPage';
+import AuditLogPage from './pages/AuditLogPage';
+
+// Protected Route Guard
+const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) => {
+  const { isAuthenticated, user } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !user?.roles.some(r => allowedRoles.includes(r))) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <DashboardLayout>{children}</DashboardLayout>;
+};
+
+// Router mapping base roles to dashboards
+const DashboardRouter = () => {
+  const { hasRole } = useAuth();
+
+  if (hasRole('ROLE_CUSTOMER')) {
+    return <CustomerDashboard />;
+  }
+  return <OperationsDashboard />;
+};
+
+// Wrapper to extract route params
+const AccountDetailsWrapper = () => {
+  const { id } = useParams<{ id: string }>();
+  const accountId = parseInt(id || '0', 10);
+  return <AccountDetailsPage accountId={accountId} />;
+};
 
 function App() {
-  const [healthStatus, setHealthStatus] = useState<string>('Checking...');
-  const [dbStatus, setDbStatus] = useState<string>('Unknown');
-  const [loading, setLoading] = useState<boolean>(true);
-
-  const fetchHealth = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/actuator/health');
-      if (response.ok) {
-        const data = await response.json();
-        setHealthStatus(data.status || 'UP');
-        setDbStatus(data.components?.db?.status || 'Mock/None');
-      } else {
-        setHealthStatus('DOWN (Non-200 Response)');
-      }
-    } catch (error) {
-      setHealthStatus('DOWN (Connection Refused)');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHealth();
-  }, []);
-
   return (
-    <div className="flex flex-col min-h-screen justify-between bg-brand-grey-100">
-      <header className="bg-white border-b border-brand-grey-200 py-4 px-6 flex justify-between items-center shadow-sm">
-        <div className="flex items-center space-x-2">
-          <span className="text-2xl">🍁</span>
-          <h1 className="text-xl font-bold text-brand-charcoal-800 tracking-tight">
-            Maple<span className="text-brand-red-500">Core</span>
-          </h1>
-        </div>
-        <span className="text-xs px-2.5 py-1 bg-brand-grey-200 text-brand-charcoal-800 rounded-full font-medium">
-          Sandbox MVP
-        </span>
-      </header>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
-      <main className="flex-grow flex items-center justify-center p-6">
-        <div className="bg-white border border-brand-grey-200 rounded-2xl p-8 max-w-md w-full shadow-lg text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-red-50 text-brand-red-500 text-3xl mb-2">
-            🍁
-          </div>
-          <h2 className="text-2xl font-bold text-brand-charcoal-800">
-            MapleCore Banking
-          </h2>
-          <p className="text-sm text-brand-grey-500 max-w-sm mx-auto leading-relaxed">
-            Secure core banking services demonstration. This environment uses fictional data. It is not a real financial institution.
-          </p>
+          {/* Core Dashboard Protected Route */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardRouter />
+              </ProtectedRoute>
+            }
+          />
 
-          <div className="p-4 bg-brand-grey-50 border border-brand-grey-200 rounded-xl space-y-3">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-brand-grey-500 font-medium">Backend Status:</span>
-              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                healthStatus === 'UP' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
-                {loading ? 'Polling...' : healthStatus}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-brand-grey-500 font-medium">Database Status:</span>
-              <span className="text-brand-charcoal-800 font-mono text-xs">
-                {loading ? 'Polling...' : dbStatus}
-              </span>
-            </div>
-          </div>
+          {/* Customer specific pages */}
+          <Route
+            path="/accounts"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_CUSTOMER']}>
+                <AccountsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/accounts/:id"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_CUSTOMER']}>
+                <AccountDetailsWrapper />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transfer"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_CUSTOMER']}>
+                <TransferPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/beneficiaries"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_CUSTOMER']}>
+                <BeneficiaryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_CUSTOMER']}>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_CUSTOMER']}>
+                <NotificationsPage />
+              </ProtectedRoute>
+            }
+          />
 
-          <button
-            onClick={fetchHealth}
-            disabled={loading}
-            className="w-full py-2.5 px-4 bg-brand-red-500 hover:bg-brand-red-600 active:bg-brand-red-700 text-white font-semibold rounded-xl shadow-md shadow-brand-red-500/10 transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Refreshing...' : 'Verify System Health'}
-          </button>
-        </div>
-      </main>
+          {/* Compliance Portal pages */}
+          <Route
+            path="/compliance/kyc"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_BANK_EMPLOYEE', 'ROLE_COMPLIANCE_OFFICER']}>
+                <KycReviewPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/compliance/alerts"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_BANK_EMPLOYEE', 'ROLE_COMPLIANCE_OFFICER']}>
+                <FraudReviewPage />
+              </ProtectedRoute>
+            }
+          />
 
-      <footer className="bg-brand-charcoal-900 text-brand-grey-300 py-6 px-6 text-center text-xs border-t border-brand-charcoal-800">
-        <p>© 2026 MapleCore Banking Platform. All rights reserved.</p>
-        <p className="mt-1 text-brand-grey-500">
-          Built with React, Vite, Spring Boot, and PostgreSQL.
-        </p>
-      </footer>
-    </div>
+          {/* Admin specific pages */}
+          <Route
+            path="/admin/audit"
+            element={
+              <ProtectedRoute allowedRoles={['ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER']}>
+                <AuditLogPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Catch-all redirect */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 
