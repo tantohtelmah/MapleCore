@@ -85,12 +85,12 @@ MapleCore is structured as a **modular monolith** with clean boundaries to allow
 
 - **Phase 0:** Planning (Completed)
 - **Phase 1:** Repository and Environment Setup (Completed)
-- **Phase 2:** Java Domain Foundation (Next)
-- **Phase 3:** Authentication & Security
-- **Phase 4:** Customer & KYC Profiles
-- **Phase 5:** Account Module
-- **Phase 6:** Beneficiaries & Transactions
-- **Phase 7:** Fraud, Notification & Audit
-- **Phase 8:** Dashboards & Polish
-- **Phase 9:** Documentation & DevOps
-- **Phase 10:** Demo Preparation
+- **Phase 2:** Java Domain Foundation (Completed)
+- **Phase 3:** Authentication & Security (Completed)
+- **Phase 4:** Customer & KYC Profiles (Completed)
+- **Phase 5:** Account Module (Completed)
+- **Phase 6:** Beneficiaries & Transactions (Completed)
+- **Phase 7:** Fraud, Notification & Audit (Completed)
+- **Phase 8:** Dashboards & Polish (Completed)
+- **Phase 9:** Documentation & DevOps (Completed)
+- **Phase 10:** Demo Preparation (Completed)
